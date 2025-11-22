@@ -7,6 +7,7 @@ import {IERC165} from "@forge-std/interfaces/IERC165.sol";
 import {ERC721} from "@solady/tokens/ERC721.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {ReentrancyGuardTransient} from "@solady/utils/ReentrancyGuardTransient.sol";
+import {RedBlackTreeLib} from "@solady/utils/RedBlackTreeLib.sol";
 
 import {BalanceDelta} from "@uniswapv4/types/BalanceDelta.sol";
 import {PoolKey} from "@uniswapv4/types/PoolKey.sol";
@@ -24,6 +25,11 @@ struct SimpleModifyLiquidityParams {
     int256 liquidityDelta;
 }
 
+struct SubPositions {
+    RedBlackTreeLib.Tree tree;
+    uint24 lastTick;
+}
+
 library CurrencySafeTransferLib {
     using SafeTransferLib for address;
 
@@ -34,10 +40,22 @@ library CurrencySafeTransferLib {
 
 contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ ReentrancyGuardTransient {
     using CurrencySafeTransferLib for Currency;
+    using RedBlackTreeLib for RedBlackTreeLib.Tree;
+    using RedBlackTreeLib for bytes32;
 
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x1F98400000000000000000000000000000000004);
 
+    int24 private constant _MIN_TICK = -887272;
+
     uint256 public nextTokenid = 1;
+
+    mapping(uint256 => SubPositions) private _subPositions;
+
+    function _tickToTreeKey(int24 tick) private pure returns (uint24) {
+        unchecked {
+            return tick - (_MIN_TICK - 1);
+        }
+    }
 
     function mint(PoolKey calldata key, SimpleModifyLiquidityParams calldata params)
         external
@@ -48,6 +66,14 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         unchecked {
             tokenId = nextTokenId++;
         }
+        SubPositions storage subPositions = _subPositions[tokenId];
+        subPositions.tree.insert(_tickToTreeKey(params.tickLower));
+        subPositions.lastTick = _tickToTreeKey(params.tickUpper);
+
+        SimpleModifyLiquidityParams[] memory paramsArray = new SimpleModifyLiquidityParams[](1);
+        paramsArray[0] = params;
+        POOL_MANAGER.unlock(abi.encode(msg.sender, address(0), key, bytes32(tokenId), params));
+
         _safeMint(msg.sender, tokenId);
     }
 
@@ -94,5 +120,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
 
         _settle(owner, recipient, key.currency0, delta.amount0());
         _settle(owner, recipient, key.currency1, delta.amount1());
+
+        return "";
     }
 }
