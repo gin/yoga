@@ -15,12 +15,13 @@ interface MultiRangePriceSelectorProps {
   subPositions: SubPositionRange[];
   onRangeChange: (id: string, minPrice: number, maxPrice: number) => void;
   onBulkRangeChange?: (updates: Array<{ id: string; minPrice: number; maxPrice: number }>) => void;
-  onAddSubPosition: () => void;
+  onAddSubPosition?: () => void;
   onRemoveSubPosition: (id: string) => void;
   handleAutoRebalance: (id: string) => void;
   tokenSymbol?: string;
   visualMinBound?: number;
   visualMaxBound?: number;
+  showAddButton?: boolean;
 }
 
 export function MultiRangePriceSelector({
@@ -34,6 +35,7 @@ export function MultiRangePriceSelector({
   tokenSymbol = "ETH/USDC",
   visualMinBound,
   visualMaxBound,
+  showAddButton = false,
 }: MultiRangePriceSelectorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState<{
@@ -179,17 +181,19 @@ export function MultiRangePriceSelector({
       {/* Visual Range Selector */}
       <div className="relative">
         {/* Add Sub-Position Button */}
-        <div className="absolute -top-10 right-0 z-30">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onAddSubPosition}
-            className="h-8 gap-1"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="text-xs">Add Position</span>
-          </Button>
-        </div>
+        {showAddButton && onAddSubPosition && (
+          <div className="absolute -top-10 right-0 z-30">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onAddSubPosition}
+              className="h-8 gap-1"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="text-xs">Add Position</span>
+            </Button>
+          </div>
+        )}
 
         <div
           ref={containerRef}

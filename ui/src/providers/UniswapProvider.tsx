@@ -279,14 +279,11 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
         poolInfo.tick
       );
 
-      const MIN_TICK = -887272;
-      const MAX_TICK = 887272;
-
       // 3. Create Position from desired amounts
       const position = Position.fromAmounts({
         pool,
-        tickLower: nearestUsableTick(MIN_TICK, TICK_SPACING),
-        tickUpper: nearestUsableTick(MAX_TICK, TICK_SPACING),
+        tickLower: nearestUsableTick(params.tickLower, TICK_SPACING),
+        tickUpper: nearestUsableTick(params.tickUpper, TICK_SPACING),
         amount0: params.amount0Desired.toString(),
         amount1: params.amount1Desired.toString(),
         useFullPrecision: true,

@@ -14,9 +14,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUniswap } from "@/providers/UniswapProvider";
 import type { PositionDetails } from "@/providers/UniswapProvider";
+import { MultiRangePriceSelector } from "@/components/MultiRangePriceSelector";
 import ethLogo from "cryptocurrency-icons/svg/color/eth.svg";
 import usdcLogo from "cryptocurrency-icons/svg/color/usdc.svg";
 import { ArrowLeft, Plus, Minus, Coins } from "lucide-react";
+import { Pool, Position as UniPosition } from "@uniswap/v4-sdk";
+import { Token, Ether, ChainId, CurrencyAmount } from "@uniswap/sdk-core";
+
+// Token constants
+const ETH_NATIVE = Ether.onChain(ChainId.UNICHAIN);
+const USDC_TOKEN = new Token(
+  ChainId.UNICHAIN,
+  "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+  6,
+  "USDC",
+  "USDC"
+);
+const FEE = 500;
+const TICK_SPACING = 10;
+const HOOKS = "0x0000000000000000000000000000000000000000";
+
+// Sub-position type
+interface SubPosition {
+  id: string;
+  minPrice: number;
+  maxPrice: number;
+  amount0: string;
+  amount1: string;
+  lastInputToken: "eth" | "usdc" | null;
+}
 
 export default function PositionPage() {
   const params = useParams();
@@ -26,6 +52,10 @@ export default function PositionPage() {
     addLiquidity,
     removeLiquidity,
     collectFees,
+    getCurrentPrice,
+    priceToTick,
+    tickToPrice,
+    getPoolInfo,
     isMinting,
     isConfirming,
     isConfirmed,
@@ -34,6 +64,11 @@ export default function PositionPage() {
 
   const [position, setPosition] = useState<PositionDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+
+  // Sub-positions state
+  const [subPositions, setSubPositions] = useState<SubPosition[]>([]);
+  const [showSubPositionsForm, setShowSubPositionsForm] = useState(false);
 
   // Add liquidity state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -70,7 +105,32 @@ export default function PositionPage() {
 
   useEffect(() => {
     fetchPosition();
-  }, [tokenId]);
+    // Fetch current price
+    getCurrentPrice().then((price) => {
+      if (price) {
+        setCurrentPrice(price);
+      }
+    });
+  }, [tokenId, getCurrentPrice]);
+
+  // Initialize sub-positions from the actual position
+  useEffect(() => {
+    if (position && currentPrice) {
+      const minPrice = tickToPrice(position.tickLower);
+      const maxPrice = tickToPrice(position.tickUpper);
+
+      setSubPositions([
+        {
+          id: "1",
+          minPrice,
+          maxPrice,
+          amount0: "",
+          amount1: "",
+          lastInputToken: null,
+        },
+      ]);
+    }
+  }, [position, currentPrice, tickToPrice]);
 
   // Refresh position after successful transaction
   useEffect(() => {
@@ -123,6 +183,120 @@ export default function PositionPage() {
       }
     } catch (err) {
       console.error("Failed to collect fees:", err);
+    }
+  };
+
+  // Sub-position handlers
+  const handleAddSubPosition = () => {
+    if (!currentPrice || subPositions.length === 0) return;
+
+    const lastPos = subPositions[subPositions.length - 1];
+    const midPrice = (lastPos.minPrice + lastPos.maxPrice) / 2;
+
+    const updatedLastPos: SubPosition = {
+      ...lastPos,
+      maxPrice: midPrice,
+      amount0: "",
+      amount1: "",
+      lastInputToken: null,
+    };
+
+    const newId = (subPositions.length + 1).toString();
+    const newSubPosition: SubPosition = {
+      id: newId,
+      minPrice: midPrice,
+      maxPrice: lastPos.maxPrice,
+      amount0: "",
+      amount1: "",
+      lastInputToken: null,
+    };
+
+    setSubPositions([
+      ...subPositions.slice(0, -1),
+      updatedLastPos,
+      newSubPosition,
+    ]);
+  };
+
+  const handleRemoveSubPosition = (id: string) => {
+    if (subPositions.length === 1) return;
+
+    const posIdx = subPositions.findIndex((sp) => sp.id === id);
+    if (posIdx === -1) return;
+
+    if (posIdx === subPositions.length - 1) {
+      const prevPos = subPositions[posIdx - 1];
+      const removedPos = subPositions[posIdx];
+
+      const extendedPrevPos: SubPosition = {
+        ...prevPos,
+        maxPrice: removedPos.maxPrice,
+        amount0: "",
+        amount1: "",
+        lastInputToken: null,
+      };
+
+      setSubPositions([
+        ...subPositions.slice(0, posIdx - 1),
+        extendedPrevPos,
+      ]);
+    } else {
+      const removedPos = subPositions[posIdx];
+      const nextPos = subPositions[posIdx + 1];
+
+      const extendedNextPos: SubPosition = {
+        ...nextPos,
+        minPrice: removedPos.minPrice,
+        amount0: "",
+        amount1: "",
+        lastInputToken: null,
+      };
+
+      setSubPositions([
+        ...subPositions.slice(0, posIdx),
+        extendedNextPos,
+        ...subPositions.slice(posIdx + 2),
+      ]);
+    }
+  };
+
+  const updateSubPositionRange = (
+    id: string,
+    minPrice: number,
+    maxPrice: number
+  ) => {
+    setSubPositions((prevPositions) =>
+      prevPositions.map((sp) =>
+        sp.id === id ? { ...sp, minPrice, maxPrice } : sp
+      )
+    );
+  };
+
+  const bulkUpdateSubPositionRanges = (
+    updates: Array<{ id: string; minPrice: number; maxPrice: number }>
+  ) => {
+    setSubPositions((prevPositions) =>
+      prevPositions.map((sp) => {
+        const update = updates.find((u) => u.id === sp.id);
+        return update
+          ? { ...sp, minPrice: update.minPrice, maxPrice: update.maxPrice }
+          : sp;
+      })
+    );
+  };
+
+  const getPositionType = (
+    minPrice: number,
+    maxPrice: number
+  ): "both" | "only-eth" | "only-usdc" | "unknown" => {
+    if (!currentPrice || !minPrice || !maxPrice) return "unknown";
+
+    if (minPrice > currentPrice) {
+      return "only-eth";
+    } else if (maxPrice < currentPrice) {
+      return "only-usdc";
+    } else {
+      return "both";
     }
   };
 
@@ -273,11 +447,24 @@ export default function PositionPage() {
           </Card>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
+            <Button
+              onClick={() => {
+                setShowSubPositionsForm(!showSubPositionsForm);
+                setShowAddForm(false);
+                setShowRemoveForm(false);
+              }}
+              variant={showSubPositionsForm ? "default" : "outline"}
+              className="h-auto py-4"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Manage Sub-Positions
+            </Button>
             <Button
               onClick={() => {
                 setShowAddForm(!showAddForm);
                 setShowRemoveForm(false);
+                setShowSubPositionsForm(false);
               }}
               variant="outline"
               className="h-auto py-4"
@@ -289,6 +476,7 @@ export default function PositionPage() {
               onClick={() => {
                 setShowRemoveForm(!showRemoveForm);
                 setShowAddForm(false);
+                setShowSubPositionsForm(false);
               }}
               variant="outline"
               className="h-auto py-4"
@@ -306,6 +494,35 @@ export default function PositionPage() {
               Collect Fees
             </Button>
           </div>
+
+          {/* Manage Sub-Positions Form */}
+          {showSubPositionsForm && currentPrice && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Manage Sub-Positions</CardTitle>
+                <CardDescription>
+                  Split your position into multiple contiguous sub-positions
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <MultiRangePriceSelector
+                  currentPrice={currentPrice}
+                  subPositions={subPositions.map((sp) => ({
+                    id: sp.id,
+                    minPrice: sp.minPrice,
+                    maxPrice: sp.maxPrice,
+                  }))}
+                  onRangeChange={updateSubPositionRange}
+                  onBulkRangeChange={bulkUpdateSubPositionRanges}
+                  onAddSubPosition={handleAddSubPosition}
+                  onRemoveSubPosition={handleRemoveSubPosition}
+                  handleAutoRebalance={() => {}}
+                  tokenSymbol="ETH/USDC"
+                  showAddButton={true}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Add Liquidity Form */}
           {showAddForm && (
