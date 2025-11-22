@@ -27,7 +27,9 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
   }
   console.log(data);
   // Wallet address with Uniswap v4 LP positions:
-  //   Smaller account:
+  //   Has 1 position:
+  //   0xb2e3e82a95f5c4c47e30a5b420ac4f99d32ef61f
+  //   Has 2 positions:
   //   0xbA85a470abAB9A283E7EfeB7BfA30ae04f6067fA
   //   Large account:
   //   0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13
@@ -57,8 +59,18 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
           <div className="space-y-2">
             {positions.map((position: ProtocolPosition, index: number) => (
               <div key={index} className="p-2 border border-gray-200 rounded-md bg-white">
-                <p className="font-medium text-sm">Position {index + 1}</p>
-                {/* This type error is ok. */}
+                <p className="font-medium text-sm">Position {index + 1}: {position.assets?.[0].symbol}/{position.assets?.[1].symbol}</p>
+                <p className="font-medium text-sm truncate">
+                  NFT:{" "}
+                  <a
+                    href={`https://opensea.io/item/${chainKey}/${position.poolAddress}/${position.name.replace('#', '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >{`${position.poolAddress}/${position.name.replace('#', '')}`}</a>
+                </p>
+
+                {/* note: This type error is ok. */}
                 <p className="text-xs text-gray-500">Value: ${position.value}</p>
               </div>
             ))}
@@ -73,21 +85,6 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
       <p className="font-semibold text-gray-800">Uniswap v4 LP positions</p>
       {uniswapValue != null ? (
         <>
-          <p className="text-gray-600">Total value: ${uniswapValue}</p>
-          <p className="text-gray-600">Number of positions: {positions?.length ?? 0}</p>
-          {positions && positions.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {positions.map((position: any, index: number) => (
-                <div key={index} className="p-2 border border-gray-200 rounded-md bg-white">
-                  <p className="font-medium text-sm">Position {index + 1}</p>
-                  <p className="text-xs text-gray-500">Value: ${position.value}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Test currently */}
-          <br />
           <p className="text-gray-600">Total value: ${uniswapValue}</p>
           {renderPositionsByChain()}
         </>

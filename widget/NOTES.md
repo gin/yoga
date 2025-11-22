@@ -6,3 +6,10 @@ Large account:
 
 Smaller account:
 0xbA85a470abAB9A283E7EfeB7BfA30ae04f6067fA
+
+To Do:
+- show name of LP position pair
+- show position's range (might need to get from external API) Ask Charlie about if there's any websites he saw?
+- show current price of pair
+- show if price is in range or out
+- alert user if out of range (future can adjust position automatically)
