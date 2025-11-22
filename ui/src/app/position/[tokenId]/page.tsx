@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUniswap } from "@/providers/UniswapProvider";
-import type { PositionDetails } from "@/providers/UniswapProvider";
+import type { Position, PositionDetails } from "@/providers/UniswapProvider";
 import { MultiRangePriceSelector } from "@/components/MultiRangePriceSelector";
 import ethLogo from "cryptocurrency-icons/svg/color/eth.svg";
 import usdcLogo from "cryptocurrency-icons/svg/color/usdc.svg";
@@ -34,16 +34,6 @@ const USDC_TOKEN = new Token(
 const FEE = 500;
 const TICK_SPACING = 10;
 const HOOKS = "0x0000000000000000000000000000000000000000";
-
-// Sub-position type
-interface SubPosition {
-  id: string;
-  minPrice: number;
-  maxPrice: number;
-  amount0: string;
-  amount1: string;
-  lastInputToken: "eth" | "usdc" | null;
-}
 
 export default function PositionPage() {
   const params = useParams();
@@ -68,7 +58,7 @@ export default function PositionPage() {
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
   // Sub-positions state
-  const [subPositions, setSubPositions] = useState<SubPosition[]>([]);
+  const [subPositions, setSubPositions] = useState<Position[]>([]);
 
   const tokenId = params.tokenId as string;
 
@@ -112,7 +102,6 @@ export default function PositionPage() {
 
       setSubPositions([
         {
-          id: "1",
           minPrice,
           maxPrice,
           amount0: "",
@@ -311,14 +300,13 @@ export default function PositionPage() {
                   <MultiRangePriceSelector
                     currentPrice={currentPrice}
                     subPositions={subPositions.map((sp) => ({
-                      id: sp.id,
                       minPrice: sp.minPrice,
                       maxPrice: sp.maxPrice,
                       amount0: sp.amount0,
                       amount1: sp.amount1,
+                      lastInputToken: "eth" as const,
                     }))}
                     onRangeChange={() => {}}
-                    onRemoveSubPosition={() => {}}
                     handleAutoRebalance={() => {}}
                     tokenSymbol="ETH/USDC"
                     modifyPosition={true}

@@ -3,28 +3,20 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "./ui/button";
-import { Label } from "@radix-ui/react-label";
 import DepositTokens from "./DepositTokens";
 import { getColors, getPositionType } from "@/lib/utils";
-
-interface SubPosition {
-  id: string;
-  minPrice: number;
-  maxPrice: number;
-  amount0: string;
-  amount1: string;
-}
+import { Position, useUniswap } from "@/providers/UniswapProvider";
+import { useAccount } from "wagmi";
 
 interface MultiRangePriceSelectorProps {
   currentPrice: number;
-  subPositions: SubPosition[];
-  onRangeChange: (id: string, minPrice: number, maxPrice: number) => void;
+  subPositions: Position[];
+  onRangeChange: (minPrice: number, maxPrice: number) => void;
   onBulkRangeChange?: (
-    updates: Array<{ id: string; minPrice: number; maxPrice: number }>
+    updates: Array<{ minPrice: number; maxPrice: number }>
   ) => void;
   onAddSubPosition?: () => void;
-  onRemoveSubPosition: (id: string) => void;
-  handleAutoRebalance: (id: string) => void;
+  handleAutoRebalance: () => void;
   tokenSymbol?: string;
   visualMinBound?: number;
   visualMaxBound?: number;
@@ -48,6 +40,9 @@ export function MultiRangePriceSelector({
   } | null>(null);
   const affectedPositionIdsRef = useRef<Set<string>>(new Set());
 
+  const { address } = useAccount();
+  const { priceToTick, mintPosition, isMinting, isConfirming } = useUniswap();
+
   // Calculate visual bounds (50% below to 50% above current price if not provided)
   const lowerBound = visualMinBound ?? currentPrice * 0.5;
   const upperBound = visualMaxBound ?? currentPrice * 1.5;
@@ -70,11 +65,14 @@ export function MultiRangePriceSelector({
   const [newPositionSide, setNewPositionSide] = useState<"left" | "right">(
     "right"
   );
-  const [newPositionMinPrice, setNewPositionMinPrice] = useState<number>(0);
-  const [newPositionMaxPrice, setNewPositionMaxPrice] = useState<number>(0);
-  const [newPositionColor, setNewPositionColor] = useState<string>("");
-  const [newPositionAmount0, setNewPositionAmount0] = useState("");
-  const [newPositionAmount1, setNewPositionAmount1] = useState("");
+
+  const [newPosition, setNewPosition] = useState<Position>({
+    minPrice: 0,
+    maxPrice: 0,
+    amount0: "",
+    amount1: "",
+    lastInputToken: "eth" as const,
+  });
 
   const [addSubPosition, setAddSubPosition] = useState(false);
 
@@ -86,16 +84,24 @@ export function MultiRangePriceSelector({
         const rightmost = subPositions[subPositions.length - 1];
         const range = rightmost.maxPrice - rightmost.minPrice;
 
-        setNewPositionMinPrice(rightmost.maxPrice); // Fixed boundary
-        setNewPositionMaxPrice(rightmost.maxPrice + range);
-        setNewPositionColor(getColors(subPositions.length).colorClass);
+        setNewPosition({
+          minPrice: rightmost.maxPrice,
+          maxPrice: rightmost.maxPrice + range,
+          amount0: "",
+          amount1: "",
+          lastInputToken: "eth" as const,
+        });
       } else {
         // Attach to the left of the leftmost position
         const leftmost = subPositions[0];
         const range = leftmost.maxPrice - leftmost.minPrice;
-        setNewPositionMaxPrice(leftmost.minPrice); // Fixed boundary
-        setNewPositionMinPrice(leftmost.minPrice - range);
-        setNewPositionColor(getColors(0).colorClass);
+        setNewPosition({
+          minPrice: leftmost.minPrice - range,
+          maxPrice: leftmost.minPrice,
+          amount0: "",
+          amount1: "",
+          lastInputToken: "eth" as const,
+        });
       }
     }
   }, [newPositionSide, currentPrice, subPositions, addSubPosition]);
@@ -142,7 +148,10 @@ export function MultiRangePriceSelector({
             constrainedPrice
           );
           constrainedPrice = Math.min(upperBound, constrainedPrice);
-          setNewPositionMaxPrice(constrainedPrice);
+          setNewPosition((prev) => ({
+            ...prev,
+            maxPrice: constrainedPrice as number,
+          }));
         } else {
           // Adding to left: only the min price slider is draggable
           // Constrained by the fixed right boundary (leftmost existing position)
@@ -152,7 +161,10 @@ export function MultiRangePriceSelector({
             leftmost.minPrice - minGap,
             constrainedPrice
           );
-          setNewPositionMinPrice(constrainedPrice);
+          setNewPosition((prev) => ({
+            ...prev,
+            minPrice: constrainedPrice as number,
+          }));
         }
         return;
       }
@@ -182,13 +194,11 @@ export function MultiRangePriceSelector({
       if (sliderIdx === 0) {
         // Leftmost slider - only update first position's minPrice
         const firstPos = subPositions[0];
-        onRangeChange(firstPos.id, constrainedPrice, firstPos.maxPrice);
-        affectedPositionIdsRef.current.add(firstPos.id);
+        onRangeChange(constrainedPrice, firstPos.maxPrice);
       } else if (sliderIdx === sliderPrices.length - 1) {
         // Rightmost slider - only update last position's maxPrice
         const lastPos = subPositions[subPositions.length - 1];
-        onRangeChange(lastPos.id, lastPos.minPrice, constrainedPrice);
-        affectedPositionIdsRef.current.add(lastPos.id);
+        onRangeChange(lastPos.minPrice, constrainedPrice);
       } else {
         // Middle slider - update both adjacent positions
         const leftPosIdx = sliderIdx - 1;
@@ -200,25 +210,19 @@ export function MultiRangePriceSelector({
         if (onBulkRangeChange) {
           onBulkRangeChange([
             {
-              id: leftPos.id,
               minPrice: leftPos.minPrice,
               maxPrice: constrainedPrice,
             },
             {
-              id: rightPos.id,
               minPrice: constrainedPrice,
               maxPrice: rightPos.maxPrice,
             },
           ]);
-          affectedPositionIdsRef.current.add(leftPos.id);
-          affectedPositionIdsRef.current.add(rightPos.id);
         } else {
           // Update left position's maxPrice
-          onRangeChange(leftPos.id, leftPos.minPrice, constrainedPrice);
+          onRangeChange(leftPos.minPrice, constrainedPrice);
           // Update right position's minPrice
-          onRangeChange(rightPos.id, constrainedPrice, rightPos.maxPrice);
-          affectedPositionIdsRef.current.add(leftPos.id);
-          affectedPositionIdsRef.current.add(rightPos.id);
+          onRangeChange(constrainedPrice, rightPos.maxPrice);
         }
       }
     };
@@ -226,7 +230,7 @@ export function MultiRangePriceSelector({
     const handleMouseUp = () => {
       // Trigger auto-rebalance for all affected positions
       affectedPositionIdsRef.current.forEach((posId) => {
-        handleAutoRebalance(posId);
+        handleAutoRebalance();
       });
       affectedPositionIdsRef.current.clear();
       setIsDragging(null);
@@ -253,6 +257,26 @@ export function MultiRangePriceSelector({
     addSubPosition,
     newPositionSide,
   ]);
+
+  const handleCreatePosition = () => {
+    if (!address || !newPosition) return;
+
+    // Convert prices to ticks
+    const tickLower = priceToTick(newPosition.minPrice);
+    const tickUpper = priceToTick(newPosition.maxPrice);
+
+    mintPosition({
+      tickLower,
+      tickUpper,
+      amount0Desired: BigInt(
+        Math.floor(parseFloat(newPosition.amount0 || "0") * 1e18)
+      ),
+      amount1Desired: BigInt(
+        Math.floor(parseFloat(newPosition.amount1 || "0") * 1e6)
+      ),
+      recipient: address,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -312,20 +336,10 @@ export function MultiRangePriceSelector({
           {subPositions.map((subPos, index) => {
             const minPercent = priceToPercent(subPos.minPrice);
             const maxPercent = priceToPercent(subPos.maxPrice);
-
-            // // Different colors for each sub-position
-            // const colors = [
-            //   "bg-primary/10 border-l-2 border-r-2 border-primary/60",
-            //   "bg-blue-500/10 border-l-2 border-r-2 border-blue-500/60",
-            //   "bg-purple-500/10 border-l-2 border-r-2 border-purple-500/60",
-            //   "bg-amber-500/10 border-l-2 border-r-2 border-amber-500/60",
-            // ];
-            // const colorClass = colors[index % colors.length];
-
             const { colorClass } = getColors(index);
 
             return (
-              <div key={subPos.id}>
+              <div key={index}>
                 {/* Selected Range Highlight */}
                 <div
                   className={`absolute h-full transition-all ${colorClass}`}
@@ -339,37 +353,33 @@ export function MultiRangePriceSelector({
           })}
 
           {/* Render new position when adding */}
-          {addSubPosition && (
-            <div
-              className="absolute h-full transition-all bg-green-500/10 border-l-2 border-r-2 border-green-500/60 border-dashed"
-              style={{
-                left: `${priceToPercent(newPositionMinPrice)}%`,
-                width: `${
-                  priceToPercent(newPositionMaxPrice) -
-                  priceToPercent(newPositionMinPrice)
-                }%`,
-              }}
-            />
-          )}
+          {addSubPosition &&
+            (() => {
+              // Always use the next color in sequence
+              const newPositionIndex = subPositions.length;
+              const { colorClass } = getColors(newPositionIndex);
+
+              return (
+                <div
+                  className={`absolute h-full transition-all ${colorClass} border-dashed`}
+                  style={{
+                    left: `${priceToPercent(newPosition.minPrice)}%`,
+                    width: `${
+                      priceToPercent(newPosition.maxPrice) -
+                      priceToPercent(newPosition.minPrice)
+                    }%`,
+                  }}
+                />
+              );
+            })()}
 
           {/* Render sliders */}
           {sliderPrices.map((sliderPrice, sliderIdx) => {
             const sliderPercent = priceToPercent(sliderPrice);
 
-            // Determine slider color based on adjacent positions
-            const handleColors = [
-              "bg-primary",
-              "bg-blue-500",
-              "bg-purple-500",
-              "bg-amber-500",
-            ];
-
             // Use color from the left position, or first color for leftmost slider
             const leftPosIdx = sliderIdx - 1;
-            const handleColor =
-              leftPosIdx >= 0
-                ? handleColors[leftPosIdx % handleColors.length]
-                : handleColors[0];
+            const { handleColor } = getColors(leftPosIdx >= 0 ? leftPosIdx : 0);
 
             // When adding a new position, make existing sliders read-only
             const isReadOnly = addSubPosition;
@@ -412,35 +422,44 @@ export function MultiRangePriceSelector({
           })}
 
           {/* Render new position's adjustable slider when adding */}
-          {addSubPosition && (
-            <div
-              className="absolute top-0 h-full -translate-x-1/2 z-20 cursor-ew-resize group"
-              style={{
-                left: `${priceToPercent(
-                  newPositionSide === "right"
-                    ? newPositionMaxPrice
-                    : newPositionMinPrice
-                )}%`,
-              }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setIsDragging({ sliderIndex: -1 }); // Use -1 to indicate new position slider
-              }}
-            >
-              <div
-                className={`h-full w-1 group-hover:w-1.5 transition-all ${newPositionColor}`}
-              />
-              <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 left-1/2">
-                <div className="w-6 h-10 bg-green-500 rounded-md border-2 border-background shadow-lg group-hover:scale-110 transition-transform flex items-center justify-center">
-                  <div className="flex flex-col gap-1">
-                    <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
-                    <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
-                    <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
+          {addSubPosition &&
+            (() => {
+              // Always use the next color in sequence
+              const newPositionIndex = subPositions.length;
+              const { handleColor } = getColors(newPositionIndex);
+
+              return (
+                <div
+                  className="absolute top-0 h-full -translate-x-1/2 z-20 cursor-ew-resize group"
+                  style={{
+                    left: `${priceToPercent(
+                      newPositionSide === "right"
+                        ? newPosition.maxPrice
+                        : newPosition.minPrice
+                    )}%`,
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setIsDragging({ sliderIndex: -1 }); // Use -1 to indicate new position slider
+                  }}
+                >
+                  <div
+                    className={`h-full w-1 ${handleColor} group-hover:w-1.5 transition-all`}
+                  />
+                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 left-1/2">
+                    <div
+                      className={`w-6 h-10 ${handleColor} rounded-md border-2 border-background shadow-lg group-hover:scale-110 transition-transform flex items-center justify-center`}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
+                        <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
+                        <div className="w-1 h-1 bg-primary-foreground/60 rounded-full" />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              );
+            })()}
 
           {/* Current Price Line */}
           <div
@@ -488,7 +507,7 @@ export function MultiRangePriceSelector({
       {/* Selected Price Ranges Info */}
       <div className="space-y-3">
         {subPositions.map((subPos, index) => (
-          <div key={subPos.id} className="relative">
+          <div key={index} className="relative">
             {!modifyPosition && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-card border border-border rounded-lg">
@@ -540,13 +559,13 @@ export function MultiRangePriceSelector({
               </p>
               <p className="text-xl font-semibold text-foreground">
                 $
-                {newPositionMinPrice.toLocaleString(undefined, {
+                {newPosition.minPrice.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {((newPositionMinPrice / currentPrice - 1) * 100).toFixed(1)}%
+                {((newPosition.minPrice / currentPrice - 1) * 100).toFixed(1)}%
                 from current
               </p>
             </div>
@@ -557,13 +576,13 @@ export function MultiRangePriceSelector({
               </p>
               <p className="text-xl font-semibold text-foreground">
                 $
-                {newPositionMaxPrice.toLocaleString(undefined, {
+                {newPosition.maxPrice.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                +{((newPositionMaxPrice / currentPrice - 1) * 100).toFixed(1)}%
+                +{((newPosition.maxPrice / currentPrice - 1) * 100).toFixed(1)}%
                 from current
               </p>
             </div>
@@ -571,20 +590,32 @@ export function MultiRangePriceSelector({
 
           <DepositTokens
             positionType={getPositionType(
-              newPositionMinPrice,
-              newPositionMaxPrice,
+              newPosition.minPrice,
+              newPosition.maxPrice,
               currentPrice
             )}
             handleAmount0Change={(value) => {
-              setNewPositionAmount0(value);
+              setNewPosition((prev) => ({ ...prev, amount0: value }));
             }}
             handleAmount1Change={(value) => {
-              setNewPositionAmount1(value);
+              setNewPosition((prev) => ({ ...prev, amount1: value }));
             }}
-            amount0={newPositionAmount0}
-            amount1={newPositionAmount1}
+            amount0={newPosition.amount0}
+            amount1={newPosition.amount1}
             currentPrice={currentPrice}
           />
+
+          <Button
+            onClick={handleCreatePosition}
+            disabled={!address || isMinting || isConfirming}
+            className="w-full"
+          >
+            {isMinting
+              ? "Creating Position..."
+              : isConfirming
+              ? "Confirming..."
+              : "Create Position"}
+          </Button>
         </div>
       )}
     </div>

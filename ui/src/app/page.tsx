@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { useUniswap } from "@/providers/UniswapProvider";
+import { useUniswap, Position } from "@/providers/UniswapProvider";
 import type {
   MintPositionParams,
   PositionDetails,
@@ -22,7 +22,7 @@ import type {
 import { MultiRangePriceSelector } from "@/components/MultiRangePriceSelector";
 import ethLogo from "cryptocurrency-icons/svg/color/eth.svg";
 import usdcLogo from "cryptocurrency-icons/svg/color/usdc.svg";
-import { Pool, Position } from "@uniswap/v4-sdk";
+import { Pool, Position as UniPosition } from "@uniswap/v4-sdk";
 import { Token, Ether, ChainId, CurrencyAmount } from "@uniswap/sdk-core";
 import DepositTokens from "@/components/DepositTokens";
 import { PositionType } from "@/lib/types";
@@ -58,20 +58,9 @@ export default function Home() {
     error,
   } = useUniswap();
 
-  // Sub-position type
-  interface Position {
-    id: string;
-    minPrice: number;
-    maxPrice: number;
-    amount0: string;
-    amount1: string;
-    lastInputToken: "eth" | "usdc" | null;
-  }
-
   // Price state
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [position, setPosition] = useState<Position>({
-    id: "1",
     minPrice: 2000,
     maxPrice: 3500,
     amount0: "",
@@ -90,7 +79,6 @@ export default function Home() {
         setCurrentPrice(price);
         // Set default range to +/- 25% from current price
         setPosition({
-          id: "1",
           minPrice: price * 0.75,
           maxPrice: price * 1.25,
           amount0: "",
@@ -320,7 +308,7 @@ export default function Home() {
         Math.floor(parseFloat(value) * 10 ** 18)
       );
 
-      const newPosition = Position.fromAmount0({
+      const newPosition = UniPosition.fromAmount0({
         pool,
         tickLower,
         tickUpper,
@@ -393,7 +381,7 @@ export default function Home() {
         Math.floor(parseFloat(value) * 10 ** 6)
       );
 
-      const newPosition = Position.fromAmount1({
+      const newPosition = UniPosition.fromAmount1({
         pool,
         tickLower,
         tickUpper,
@@ -450,17 +438,14 @@ export default function Home() {
                   <MultiRangePriceSelector
                     currentPrice={currentPrice}
                     subPositions={[position]}
-                    onRangeChange={(id, minPrice, maxPrice) => {
+                    onRangeChange={(minPrice, maxPrice) => {
                       setPosition((prevPosition) => ({
                         ...prevPosition,
                         minPrice,
                         maxPrice,
                       }));
                     }}
-                    onBulkRangeChange={() => {}}
-                    onAddSubPosition={() => {}}
-                    onRemoveSubPosition={() => {}}
-                    handleAutoRebalance={(id) => {
+                    handleAutoRebalance={() => {
                       // Recalculate based on the last input token (the anchor)
                       if (
                         position.lastInputToken === "eth" &&
@@ -505,7 +490,7 @@ export default function Home() {
                     ? "Creating Position..."
                     : isConfirming
                     ? "Confirming..."
-                    : "Create Position"}
+                    : "Create Sub-Position"}
                 </Button>
 
                 {/* Transaction Status */}

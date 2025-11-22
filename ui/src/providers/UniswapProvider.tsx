@@ -7,7 +7,7 @@ import { unichain } from "viem/chains";
 import { Token, ChainId, Ether, Percent, Price } from "@uniswap/sdk-core";
 import {
   Pool,
-  Position,
+  Position as UniPosition,
   V4PositionManager,
   priceToClosestTick,
   tickToPrice,
@@ -59,6 +59,15 @@ export interface PoolInfo {
   protocolFee: number;
   lpFee: number;
   liquidity: bigint;
+}
+
+// Position type
+export interface Position {
+  minPrice: number;
+  maxPrice: number;
+  amount0: string;
+  amount1: string;
+  lastInputToken: "eth" | "usdc" | null;
 }
 
 export interface PositionDetails {
@@ -280,7 +289,7 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
       );
 
       // 3. Create Position from desired amounts
-      const position = Position.fromAmounts({
+      const position = UniPosition.fromAmounts({
         pool,
         tickLower: nearestUsableTick(params.tickLower, TICK_SPACING),
         tickUpper: nearestUsableTick(params.tickUpper, TICK_SPACING),
@@ -500,7 +509,7 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
         poolInfo.tick
       );
 
-      const position = new Position({
+      const position = new UniPosition({
         pool,
         tickLower: positionInfo.getTickLower(),
         tickUpper: positionInfo.getTickUpper(),
@@ -600,7 +609,7 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
       );
 
       // 4. Create Position from desired amounts
-      const position = Position.fromAmounts({
+      const position = UniPosition.fromAmounts({
         pool,
         tickLower: positionDetails.tickLower,
         tickUpper: positionDetails.tickUpper,
@@ -696,7 +705,7 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
       );
 
       // 4. Create Position instance with current liquidity
-      const position = new Position({
+      const position = new UniPosition({
         pool,
         tickLower: positionDetails.tickLower,
         tickUpper: positionDetails.tickUpper,
@@ -792,7 +801,7 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
         poolInfo.tick
       );
 
-      const position = new Position({
+      const position = new UniPosition({
         pool,
         tickLower: positionDetails.tickLower,
         tickUpper: positionDetails.tickUpper,
