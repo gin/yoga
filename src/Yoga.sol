@@ -140,7 +140,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         onlyOwnerOrApproved(tokenId)
         returns (BalanceDelta delta)
     {
-        SimpleModifyLiquidityParams[] memory actions = new SimpleModifyLiquidityParams[](3);
+        SimpleModifyLiquidityParams[] memory actions = new SimpleModifyLiquidityParams[](4);
 
         TokenInfo storage tokenInfo = _tokenInfo[tokenId];
         RedBlackTreeLib.Tree storage subPositions = tokenInfo.subPositions;
@@ -167,11 +167,13 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             i.liquidityDelta = params.liquidityDelta;
             actions.truncate(1);
         } else if ((leftTick = _treeKeyToTick(leftTickPtr.value())) == params.tickLower) {
+            subPositions.insert(_tickToTreeKey(rightTick = params.tickUpper));
+
             if ((rightTickPtr = leftTick.next()) == 0) {
                 if (params.liquidityDelta < 0) {
                     revert NegativeLiquidity();
                 }
-                subPositions.insert(_tickToTreeKey(rightTick = params.tickUpper));
+
                 actions[0] = params;
                 actions.truncate(1);
             } else {
@@ -185,26 +187,40 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                 }
                 {
                     SimpleModifyLiquidityParams memory i = actions[1];
+                    i.tickLower = params.tickUpper;
+                    i.tickUpper = rightTick;
+                    i.liquidityDelta = int256(beforeLiquidity);
+                }
+
+                {
+                    SimpleModifyLiquidityParams memory i = actions[2];
                     i.tickLower = params.tickLower;
                     i.tickUpper = params.tickUpper;
                     i.liquidityDelta = int256(beforeLiquidity) + params.liquidityDelta;
                     if (i.liquidityDelta < 0) {
                         revert NegativeLiquidity();
                     }
+
+                    // TODO: delete this range from the enumeration if the liquidity is zero and we're at the end of the range
+
                     bytes32 beforeTickPtr = leftTickPtr.prev();
+                    int24 beforeTick;
+                    int256 combinedLiquidity;
+
                     if (
                         beforeTickPtr != 0
-                            && _getLiquidity(tokenId, key, _treeKeyToTick(beforeTickPtr.value()), i.tickLower)
-                                == i.liquidityDelta
+                            && _getLiquidity(tokenId, key, beforeTick = _treeKeyToTick(beforeTickPtr.value()), i.tickLower)
+                                == combinedLiquidity = i.liquidityDelta
                     ) {
-                        // TODO
+                        i = actions[3];
+                        i.tickLower = beforeTick;
+                        i.tickUpper = i.tickLower;
+                        i.liquidityDelta = combinedLiquidity;
+
+                        (actions[3], actions[2]) = (actions[2], actions[3]);
+                    } else {
+                        actions.truncate(3);
                     }
-                }
-                {
-                    SimpleModifyLiquidityParams memory i = actions[2];
-                    i.tickLower = params.tickUpper;
-                    i.tickUpper = rightTick;
-                    i.liquidityDelta = int256(beforeLiquidity);
                 }
             }
         } else if (
@@ -215,7 +231,9 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         ) {
             revert SplitTooComplicated();
         } else {
-            uint256 beforeLiquidity = _getLiquidity(tokenId, key, params.tickLower, rightTick);
+            subPositions.insert(_tickToTreeKey(params.tickLower));
+
+            uint256 beforeLiquidity = _getLiquidity(tokenId, key, leftTick, params.tickUpper);
             {
                 SimpleModifyLiquidityParams memory i = actions[0];
                 i.tickLower = leftTick;
@@ -236,18 +254,28 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                 if (i.liquidityDelta < 0) {
                     revert NegativeLiquidity();
                 }
+
+                // TODO: delete this range from the enumeration if the liquidity is zero and we're at the end of the range
+
                 bytes32 afterTickPtr = rightTickPtr.next();
+                int24 afterTick;
+                int256 combinedLiquidity;
                 if (
                     afterTickPtr != 0
-                        && _getLiquidity(tokenId, key, i.tickUpper, _treeKeyToTick(afterTickPtr.value()))
-                            == i.liquidityDelta
+                        && _getLiquidity(tokenId, key, i.tickUpper, afterTick = _treeKeyToTick(afterTickPtr.value()))
+                            == (combinedLiquidity = i.liquidityDelta)
                 ) {
-                    // TODO:
+                    i = actions[3];
+                    i.tickLower = i.tickUpper;
+                    i.tickUpper = afterTick;
+                    i.liquidityDelta = combinedLiquidity;
+
+                    (actions[3], actions[2]) = (actions[2], actions[3]);
+                } else {
+                    actions.truncate(3);
                 }
             }
         }
-
-        // TODO: merge liquidity when the amounts are set exactly equal in the next/previous segment
 
         delta = abi.decode(
             POOL_MANAGER.unlock(abi.encode(msg.sender, recipient, key, bytes32(tokenId), actions)), (BalanceDelta)
