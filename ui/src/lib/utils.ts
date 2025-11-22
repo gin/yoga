@@ -25,3 +25,30 @@ export const getPositionType = (
     return PositionType.BOTH;
   }
 };
+
+export const getColors = (index: number) => {
+  const colors = [
+    {
+      colorClass: "bg-primary/10 border-l-2 border-r-2 border-primary/60",
+      handleColor: "bg-primary",
+      borderColor: "border-primary/20",
+    },
+    {
+      colorClass: "bg-blue-500/10 border-l-2 border-r-2 border-blue-500/60",
+      handleColor: "bg-blue-500",
+      borderColor: "border-blue-500/20",
+    },
+    {
+      colorClass: "bg-purple-500/10 border-l-2 border-r-2 border-purple-500/60",
+      handleColor: "bg-purple-500",
+      borderColor: "border-purple-500/20",
+    },
+    {
+      colorClass: "bg-amber-500/10 border-l-2 border-r-2 border-amber-500/60",
+      handleColor: "bg-amber-500",
+      borderColor: "border-amber-500/20",
+    },
+  ];
+
+  return colors[index % colors.length];
+};

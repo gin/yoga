@@ -70,17 +70,6 @@ export default function PositionPage() {
   // Sub-positions state
   const [subPositions, setSubPositions] = useState<SubPosition[]>([]);
 
-  // // Add new position state
-  // const [newPositionSide, setNewPositionSide] = useState<"left" | "right">(
-  //   "right"
-  // );
-  // const [newPositionMinPrice, setNewPositionMinPrice] = useState<number>(0);
-  // const [newPositionMaxPrice, setNewPositionMaxPrice] = useState<number>(0);
-  // const [newPositionAmount0, setNewPositionAmount0] = useState("");
-  // const [newPositionAmount1, setNewPositionAmount1] = useState("");
-
-  // Edit existing position state
-
   const tokenId = params.tokenId as string;
 
   const fetchPosition = async () => {
@@ -307,45 +296,49 @@ export default function PositionPage() {
 
           {/* Overall Position Visualization */}
           {currentPrice && subPositions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Position Overview</CardTitle>
-                  <CardDescription>
-                    Your position contains {subPositions.length} contiguous
-                    sub-position{subPositions.length > 1 ? "s" : ""}
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <MultiRangePriceSelector
-                  currentPrice={currentPrice}
-                  subPositions={subPositions.map((sp) => ({
-                    id: sp.id,
-                    minPrice: sp.minPrice,
-                    maxPrice: sp.maxPrice,
-                  }))}
-                  onRangeChange={() => {}}
-                  onRemoveSubPosition={() => {}}
-                  handleAutoRebalance={() => {}}
-                  tokenSymbol="ETH/USDC"
-                  modifyPosition={true}
-                />
-                {/* Sub-Position Cards */}
-                {currentPrice && subPositions.length > 0 && (
-                  <div className="space-y-3">
-                    {subPositions.map((subPos, index) => (
-                      <SubPosition
-                        index={index}
-                        minPrice={subPos.minPrice}
-                        maxPrice={subPos.maxPrice}
-                        currentPrice={currentPrice}
-                      />
-                    ))}
+            <div className="my-4">
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle>Position Overview</CardTitle>
+                    <CardDescription>
+                      Your position contains {subPositions.length} contiguous
+                      sub-position{subPositions.length > 1 ? "s" : ""}
+                    </CardDescription>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <MultiRangePriceSelector
+                    currentPrice={currentPrice}
+                    subPositions={subPositions.map((sp) => ({
+                      id: sp.id,
+                      minPrice: sp.minPrice,
+                      maxPrice: sp.maxPrice,
+                      amount0: sp.amount0,
+                      amount1: sp.amount1,
+                    }))}
+                    onRangeChange={() => {}}
+                    onRemoveSubPosition={() => {}}
+                    handleAutoRebalance={() => {}}
+                    tokenSymbol="ETH/USDC"
+                    modifyPosition={true}
+                  />
+                  {/* Sub-Position Cards */}
+                  {currentPrice && subPositions.length > 0 && (
+                    <div className="space-y-3">
+                      {subPositions.map((subPos, index) => (
+                        <SubPosition
+                          index={index}
+                          minPrice={subPos.minPrice}
+                          maxPrice={subPos.maxPrice}
+                          currentPrice={currentPrice}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </div>
