@@ -227,19 +227,9 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                             _burn(tokenId);
                         } else {
                             // Check if next range has zero liquidity and would become invalid terminus
-                            int24 afterTick = _treeKeyToTick(afterTickPtr.value());
-                            uint256 adjacentLiquidity = _getLiquidity(tokenId, key, params.tickUpper, afterTick);
-
-                            if (adjacentLiquidity == 0) {
+                            if (_getLiquidity(tokenId, key, params.tickUpper, _treeKeyToTick(afterTickPtr.value())) == 0) {
                                 // Cascade: remove the zero-liquidity range that would be at terminus
                                 subPositions.remove(_tickToTreeKey(params.tickUpper));
-                                subPositions.remove(_tickToTreeKey(afterTick));
-
-                                // If this was the last range, burn NFT
-                                if (afterTickPtr.next() == 0) {
-                                    delete tokenInfo.key;
-                                    _burn(tokenId);
-                                }
                             }
                         }
                         return actions.truncate(1);
@@ -251,19 +241,9 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
 
                         // Check if previous range has zero liquidity and would become invalid terminus
                         if (beforeTickPtr != 0) {
-                            int24 beforeTick = _treeKeyToTick(beforeTickPtr.value());
-                            uint256 adjacentLiquidity = _getLiquidity(tokenId, key, beforeTick, params.tickLower);
-
-                            if (adjacentLiquidity == 0) {
+                            if (_getLiquidity(tokenId, key, _treeKeyToTick(beforeTickPtr.value()), params.tickLower) == 0) {
                                 // Cascade: remove the zero-liquidity range that would be at terminus
-                                subPositions.remove(_tickToTreeKey(beforeTick));
                                 subPositions.remove(_tickToTreeKey(params.tickLower));
-
-                                // If this was the last range, burn NFT
-                                if (beforeTickPtr.prev() == 0) {
-                                    delete tokenInfo.key;
-                                    _burn(tokenId);
-                                }
                             }
                         }
                         return actions.truncate(1);
