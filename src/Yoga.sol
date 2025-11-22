@@ -16,12 +16,12 @@ import {BalanceDelta} from "@uniswapv4/types/BalanceDelta.sol";
 import {PoolKey} from "@uniswapv4/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "@uniswapv4/types/PoolOperation.sol";
 import {IPoolManager} from "@uniswapv4/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "@uniswapv4/interfaces/IUnlockCallback.sol";
+import {IUnlockCallback} from "@uniswapv4/interfaces/callback/IUnlockCallback.sol";
 import {Position} from "@uniswapv4/libraries/Position.sol";
 import {StateLibrary} from "@uniswapv4/libraries/StateLibrary.sol";
 
 //import {MultiCallContext} from "lib/MultiCallContext.sol";
-import {Panic} from "lib/Panic.sol";
+import {Panic} from "./lib/Panic.sol";
 
 struct SimpleModifyLiquidityParams {
     // the lower and upper tick of the position
@@ -32,7 +32,7 @@ struct SimpleModifyLiquidityParams {
 }
 
 library LibSimpleModifyLiquidityParams {
-    function truncate(SimpleModifyLiquidityParams[] memory a, uint256 l) {
+    function truncate(SimpleModifyLiquidityParams[] memory a, uint256 l) internal pure {
         if (l > a.length) {
             Panic.panic(Panic.ARRAY_OUT_OF_BOUNDS);
         }
@@ -42,7 +42,7 @@ library LibSimpleModifyLiquidityParams {
     }
 }
 
-using LibSimpleModifyLiquidityParams for SimpleModifyLiquidityParams;
+using LibSimpleModifyLiquidityParams for SimpleModifyLiquidityParams[];
 
 library CurrencySafeTransferLib {
     using SafeTransferLib for address;
@@ -65,13 +65,26 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         if (!_isApprovedOrOwner(msg.sender, tokenId)) {
             revert NotOwnerNorApproved();
         }
+        _;
     }
 
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x1F98400000000000000000000000000000000004);
 
+    function name() public pure override returns (string memory) {
+        return "YogaPosition";
+    }
+
+    function symbol() public pure override returns (string memory) {
+        return "YP";
+    }
+
+    function tokenURI(uint256 tokenId) public pure override returns (string memory) {
+        return "/dev/null";
+    }
+
     int24 private constant _MIN_TICK = -887272;
 
-    uint256 public nextTokenid = 1;
+    uint256 public nextTokenId = 1;
 
     struct TokenInfo {
         RedBlackTreeLib.Tree subPositions;
@@ -86,9 +99,9 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         }
     }
 
-    function _treeKeyToTick(uint24 treeKey) private pure returns (int24) {
+    function _treeKeyToTick(uint256 treeKey) private pure returns (int24) {
         unchecked {
-            return int24(tick) + (_MIN_TICK - 1);
+            return int24(uint24(treeKey)) + (_MIN_TICK - 1);
         }
     }
 
@@ -129,7 +142,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         return StateLibrary.getPositionLiquidity(
             POOL_MANAGER,
             key.toId(),
-            Position.calculatePositionKey(address(this), tickLower, tickUpper, bytes32(tokenid))
+            Position.calculatePositionKey(address(this), tickLower, tickUpper, bytes32(tokenId))
         );
     }
 
@@ -148,7 +161,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
 
         bytes32 leftTickPtr = subPositions.nearestBefore(_tickToTreeKey(params.tickLower));
         int24 leftTick;
-        bytes32 rightTick;
+        bytes32 rightTickPtr;
         int24 rightTick;
         if (leftTickPtr == 0) {
             rightTickPtr = subPositions.first();
@@ -168,7 +181,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             i.liquidityDelta = params.liquidityDelta;
             actions.truncate(1);
         } else if ((leftTick = _treeKeyToTick(leftTickPtr.value())) == params.tickLower) {
-            if ((rightTickPtr = leftTick.next()) == 0) {
+            if ((rightTickPtr = leftTickPtr.next()) == 0) {
                 if (params.liquidityDelta < 0) {
                     revert NegativeLiquidity();
                 }
@@ -233,7 +246,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                         if (
                             _getLiquidity(
                                 tokenId, key, beforeTick = _treeKeyToTick(beforeTickPtr.value()), params.tickLower
-                            ) == combinedLiquidity = i.liquidityDelta
+                            ) == uint256(combinedLiquidity = i.liquidityDelta)
                         ) {
                             // the liquidity in the modified range
                             // [`params.tickLower` `params.tickUpper`] is
@@ -260,8 +273,8 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         } else if (
             (
                 rightTick =
-                    _treeKeyToTick((rightTickPtr = subpositions.nearestAfter(_tickToTreeKey(params.tickUpper))).value())
-            ) != param.tickUpper
+                    _treeKeyToTick((rightTickPtr = subPositions.nearestAfter(_tickToTreeKey(params.tickUpper))).value())
+            ) != params.tickUpper
         ) {
             revert SplitTooComplicated();
         } else {
@@ -308,7 +321,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                     int256 combinedLiquidity;
                     if (
                         _getLiquidity(tokenId, key, params.tickUpper, afterTick = _treeKeyToTick(afterTickPtr.value()))
-                            == (combinedLiquidity = i.liquidityDelta)
+                            == uint256(combinedLiquidity = i.liquidityDelta)
                     ) {
                         // the liquidity in the modified range
                         // [`params.tickLower` `params.tickUpper`] is identical
@@ -346,7 +359,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         if (amount < 0) {
             uint256 debt;
             unchecked {
-                debt = -int256(amount);
+                debt = uint256(-int256(amount));
             }
             POOL_MANAGER.sync(currency);
             if (currency.isAddressZero()) {
@@ -369,7 +382,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             PoolKey memory key,
             bytes32 salt,
             SimpleModifyLiquidityParams[] memory params
-        ) = abi.decode(data, (address, address payable, PoolKey, bytes32, SimpleModifyLiquidityParams[]));
+        ) = abi.decode(data, (address, address, PoolKey, bytes32, SimpleModifyLiquidityParams[]));
 
         BalanceDelta delta;
         ModifyLiquidityParams memory managerParams;
@@ -380,7 +393,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             managerParams.tickUpper = simpleParams.tickUpper;
             managerParams.liquidityDelta = simpleParams.liquidityDelta;
             (BalanceDelta callerDelta,) = POOL_MANAGER.modifyLiquidity(key, managerParams, ""); // TODO: hookData
-            delta += callerDelta;
+            delta = delta + callerDelta;
         }
 
         _settle(owner, recipient, key.currency0, delta.amount0());
@@ -400,7 +413,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
     }
 
     function getTicks(uint256 tokenId) external view returns (int24[] memory) {
-        SubPositions storage subPositions = _subPositions[tokenId];
+        RedBlackTreeLib.Tree storage subPositions = _tokenInfo[tokenId].subPositions;
 
         // allocate an extra word to store the indirection offset for the return
         assembly ("memory-safe") {
@@ -428,5 +441,10 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             mstore(result, 0x20)
             return(result, add(0x40, len))
         }
+    }
+
+    // Solidity inheritance sucks
+    function supportsInterface(bytes4 interfaceId) public view override(IERC165, ERC721) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }
