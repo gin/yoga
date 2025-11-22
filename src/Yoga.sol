@@ -231,8 +231,9 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                         int256 combinedLiquidity;
 
                         if (
-                            _getLiquidity(tokenId, key, beforeTick = _treeKeyToTick(beforeTickPtr.value()), params.tickLower)
-                                    == combinedLiquidity = i.liquidityDelta
+                            _getLiquidity(
+                                tokenId, key, beforeTick = _treeKeyToTick(beforeTickPtr.value()), params.tickLower
+                            ) == combinedLiquidity = i.liquidityDelta
                         ) {
                             // the liquidity in the modified range
                             // [`params.tickLower` `params.tickUpper`] is
@@ -306,8 +307,8 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                     int24 afterTick;
                     int256 combinedLiquidity;
                     if (
-                        _getLiquidity(tokenId, key, params..tickUpper, afterTick = _treeKeyToTick(afterTickPtr.value()))
-                                == (combinedLiquidity = i.liquidityDelta)
+                        _getLiquidity(tokenId, key, params.tickUpper, afterTick = _treeKeyToTick(afterTickPtr.value()))
+                            == (combinedLiquidity = i.liquidityDelta)
                     ) {
                         // the liquidity in the modified range
                         // [`params.tickLower` `params.tickUpper`] is identical
