@@ -263,8 +263,8 @@ export default function PositionPage() {
               )}
 
               {isConfirmed && (
-                <div className="p-4 bg-green-500/10 border border-green-500 rounded-md">
-                  <p className="text-sm text-green-600 font-medium">
+                <div className="p-4 bg-success/10 border border-success rounded-md">
+                  <p className="text-sm text-success font-medium">
                     Transaction successful! Position will update shortly...
                   </p>
                 </div>

@@ -7,13 +7,13 @@ export function Header() {
         <div className="flex items-center justify-between">
           {/* Logo Section */}
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">UP</span>
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
+              <span className="text-primary-foreground font-bold text-xl">Y</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">Uniswap Position Manager</h1>
+              <h1 className="text-xl font-bold">Yoga Position Manager</h1>
               <p className="text-xs text-muted-foreground">
-                Advanced Liquidity Control
+                Bend your liquidity
               </p>
             </div>
           </div>

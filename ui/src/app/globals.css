@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Dark neutral Web3 dashboard - Reown/Uniswap aesthetic */
+  --radius: 0.75rem;
+
+  /* Neutral dark backgrounds - no color tint */
+  --background: oklch(0.13 0 0); /* Deep neutral dark */
+  --foreground: oklch(0.96 0 0); /* Near white, neutral */
+
+  /* Card colors - subtle elevation */
+  --card: oklch(0.17 0 0); /* Slightly lighter than background */
+  --card-foreground: oklch(0.96 0 0);
+
+  /* Popover colors */
+  --popover: oklch(0.16 0 0);
+  --popover-foreground: oklch(0.96 0 0);
+
+  /* Primary - vibrant green (only strong accent color) */
+  --primary: oklch(0.68 0.19 150); /* Emerald green */
+  --primary-foreground: oklch(0.13 0 0); /* Dark text on green */
+
+  /* Secondary - muted neutral */
+  --secondary: oklch(0.22 0 0);
+  --secondary-foreground: oklch(0.96 0 0);
+
+  /* Muted - for less prominent UI elements */
+  --muted: oklch(0.20 0 0);
+  --muted-foreground: oklch(0.58 0 0); /* Medium grey */
+
+  /* Accent - same green as primary for consistency */
+  --accent: oklch(0.68 0.19 150);
+  --accent-foreground: oklch(0.13 0 0);
+
+  /* Destructive/Error - muted red, not too vibrant */
+  --destructive: oklch(0.55 0.15 25);
+  --destructive-foreground: oklch(0.96 0 0);
+
+  /* Success - vibrant green (matches primary) */
+  --success: oklch(0.68 0.19 150);
+  --success-foreground: oklch(0.13 0 0);
+
+  /* Warning - muted amber */
+  --warning: oklch(0.70 0.12 75);
+  --warning-foreground: oklch(0.13 0 0);
+
+  /* Borders and inputs - very subtle */
+  --border: oklch(0.25 0 0); /* Subtle neutral border */
+  --input: oklch(0.19 0 0); /* Slightly elevated input */
+  --ring: oklch(0.68 0.19 150); /* Green focus ring */
+
+  /* Chart colors - green with neutral accents */
+  --chart-1: oklch(0.68 0.19 150); /* Primary green */
+  --chart-2: oklch(0.65 0.12 180); /* Muted cyan */
+  --chart-3: oklch(0.60 0.10 220); /* Muted blue */
+  --chart-4: oklch(0.55 0.08 260); /* Muted purple */
+  --chart-5: oklch(0.70 0.12 75); /* Muted amber */
+
+  /* Sidebar colors */
+  --sidebar: oklch(0.15 0 0);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-primary: oklch(0.68 0.19 150);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.20 0 0);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(0.25 0 0);
+  --sidebar-ring: oklch(0.68 0.19 150);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-noto-sans);
   --font-mono: var(--font-geist-mono);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-noto-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling - minimal, neutral */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
 }

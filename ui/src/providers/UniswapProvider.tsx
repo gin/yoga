@@ -4,8 +4,8 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { createPublicClient, http } from "viem";
 import { unichain } from "viem/chains";
-import { Token, ChainId, Ether, Percent } from "@uniswap/sdk-core";
-import { Pool, Position, V4PositionManager } from "@uniswap/v4-sdk";
+import { Token, ChainId, Ether, Percent, Price } from "@uniswap/sdk-core";
+import { Pool, Position, V4PositionManager, priceToClosestTick, tickToPrice } from "@uniswap/v4-sdk";
 import { nearestUsableTick } from "@uniswap/v3-sdk";
 import { STATE_VIEW_ABI } from "../config/abis";
 
@@ -93,6 +93,9 @@ interface SubgraphPosition {
 
 interface UniswapContextType {
   getPoolInfo: () => Promise<PoolInfo | null>;
+  getCurrentPrice: () => Promise<number | null>;
+  priceToTick: (price: number) => number;
+  tickToPrice: (tick: number) => number;
   mintPosition: (params: MintPositionParams) => Promise<void>;
   addLiquidity: (params: AddLiquidityParams) => Promise<void>;
   removeLiquidity: (params: RemoveLiquidityParams) => Promise<void>;
@@ -180,6 +183,68 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
       setError(err as Error);
       return null;
     }
+  };
+
+  /**
+   * Gets the current price of ETH in terms of USDC
+   */
+  const getCurrentPrice = async (): Promise<number | null> => {
+    try {
+      const poolInfo = await getPoolInfo();
+      if (!poolInfo) return null;
+
+      // Create Pool instance
+      const pool = new Pool(
+        ETH_NATIVE,
+        USDC_TOKEN,
+        FEE,
+        TICK_SPACING,
+        HOOKS,
+        poolInfo.sqrtPriceX96.toString(),
+        poolInfo.liquidity.toString(),
+        poolInfo.tick
+      );
+
+      // Get price of ETH (currency0) in terms of USDC (currency1)
+      const price = pool.priceOf(ETH_NATIVE);
+
+      // Convert to number - this gives us USDC per ETH
+      return parseFloat(price.toSignificant(6));
+    } catch (err) {
+      console.error("Error getting current price:", err);
+      return null;
+    }
+  };
+
+  /**
+   * Converts a price to the nearest valid tick
+   * @param price - Price in USDC per ETH
+   */
+  const priceToTickFn = (price: number): number => {
+    // Create a Price object representing USDC per ETH
+    const baseAmount = (10 ** ETH_NATIVE.decimals).toString();
+    const quoteAmount = Math.floor(price * 10 ** USDC_TOKEN.decimals).toString();
+
+    const priceObj = new Price(
+      ETH_NATIVE,
+      USDC_TOKEN,
+      baseAmount,
+      quoteAmount
+    );
+
+    // Get closest tick and ensure it's aligned with tick spacing
+    const tick = priceToClosestTick(priceObj);
+    return nearestUsableTick(tick, TICK_SPACING);
+  };
+
+  /**
+   * Converts a tick to a price
+   * @param tick - Tick value
+   * @returns Price in USDC per ETH
+   */
+  const tickToPriceFn = (tick: number): number => {
+    const priceObj = tickToPrice(ETH_NATIVE, USDC_TOKEN, tick);
+    return parseFloat(priceObj.toSignificant(6));
   };
 
   /**
@@ -740,6 +805,9 @@ export function UniswapProvider({ children }: { children: ReactNode }) {
 
   const value: UniswapContextType = {
     getPoolInfo,
+    getCurrentPrice,
+    priceToTick: priceToTickFn,
+    tickToPrice: tickToPriceFn,
     mintPosition,
     addLiquidity,
     removeLiquidity,
