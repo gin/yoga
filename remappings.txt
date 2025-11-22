@@ -1,0 +1,3 @@
+@solady/=lib/solady/src
+@forge-std/=lib/forge-std/src
+@uniswapv4/=lib/v4-core/src
