@@ -119,6 +119,7 @@ export default function Home() {
           const openPositions = fetchedPositions.filter(
             (position) => position.liquidity > BigInt(0)
           );
+          console.log("openPositions", openPositions);
           setPositions(openPositions);
         });
       }, 2000);
@@ -289,7 +290,7 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center font-sans">
       {/* Main Content */}
       {isConnected && (
-        <div className="max-w-2xl mx-auto">
+        <div className="w-2xl mx-auto">
           {/* Position Management Card */}
           <Card>
             <CardHeader>
@@ -584,6 +585,13 @@ export default function Home() {
                           </div>
                           <div className="text-sm font-medium">
                             Liquidity: {position.liquidity.toString()}
+                          </div>
+                          <div className="text-sm font-medium">
+                            Position Size: $
+                            {position.totalValueUsd.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </div>
                         </div>
                       </div>
