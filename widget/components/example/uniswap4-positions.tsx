@@ -26,13 +26,7 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
     );
   }
   console.log(data);
-  // Wallet address with Uniswap v4 LP positions:
-  //   Has 1 position:
-  //   0xb2e3e82a95f5c4c47e30a5b420ac4f99d32ef61f
-  //   Has 2 positions:
-  //   0xbA85a470abAB9A283E7EfeB7BfA30ae04f6067fA
-  //   Large account:
-  //   0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13
+
   const uniswapValue = data?.assetByProtocols?.uniswap4?.value;
   const positions = data?.assetByProtocols?.uniswap4?.chains.ethereum?.protocolPositions.LIQUIDITYPOOL.protocolPositions;
 
@@ -69,8 +63,6 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
                     className="text-blue-600 hover:underline"
                   >{`${position.poolAddress}/${position.name.replace('#', '')}`}</a>
                 </p>
-
-                {/* note: This type error is ok. */}
                 <p className="text-xs text-gray-500">Value: ${position.value}</p>
               </div>
             ))}

@@ -130,3 +130,7 @@ export interface NFTCollection {
   imgLarge?: string; // Requires includeImages=true
   explorerUrl?: string; // Requires includeExplorerUrls=true
 }
+
+export interface ProtocolPosition {
+  value?: number;
+}
