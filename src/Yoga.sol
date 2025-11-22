@@ -74,6 +74,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
     using RedBlackTreeLib for RedBlackTreeLib.Tree;
     using RedBlackTreeLib for bytes32;
 
+    error TooMuchSlippage(Currency currency, uint256 limit, uint256 actual);
     error SplitTooComplicated();
     error NegativeLiquidity();
     error ZeroDelta();
@@ -122,12 +123,12 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         }
     }
 
-    function mint(PoolKey calldata key, SimpleModifyLiquidityParams calldata params)
-        external
-        payable
-        nonReentrant
-        returns (uint256 tokenId, BalanceDelta delta)
-    {
+    function mint(
+        PoolKey calldata key,
+        SimpleModifyLiquidityParams calldata params,
+        uint128 currency0Max,
+        uint128 currency1Max
+    ) external payable nonReentrant returns (uint256 tokenId, BalanceDelta delta) {
         unchecked {
             tokenId = nextTokenId++;
         }
@@ -144,6 +145,13 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
             POOL_MANAGER.unlock(abi.encode(msg.sender, payable(msg.sender), key, bytes32(tokenId), paramsArray)),
             (BalanceDelta)
         );
+
+        if (-int256(delta.amount0()) > int256(uint256(currency0Max))) {
+            revert TooMuchSlippage(key.currency0, currency0Max, uint256(-int256(delta.amount0())));
+        }
+        if (-int256(delta.amount1()) > int256(uint256(currency1Max))) {
+            revert TooMuchSlippage(key.currency1, currency1Max, uint256(-int256(delta.amount1())));
+        }
 
         _safeMint(msg.sender, tokenId);
         if (address(this).balance != 0) {
@@ -455,13 +463,13 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         }
     }
 
-    function modify(address payable recipient, uint256 tokenId, SimpleModifyLiquidityParams calldata params)
-        external
-        payable
-        nonReentrant
-        onlyOwnerOrApproved(tokenId)
-        returns (BalanceDelta delta)
-    {
+    function modify(
+        address payable recipient,
+        uint256 tokenId,
+        SimpleModifyLiquidityParams calldata params,
+        uint128 currency0Max,
+        uint128 currency1Max
+    ) external payable nonReentrant onlyOwnerOrApproved(tokenId) returns (BalanceDelta delta) {
         if (params.liquidityDelta == 0) {
             revert ZeroDelta();
         }
@@ -474,6 +482,13 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         delta = abi.decode(
             POOL_MANAGER.unlock(abi.encode(msg.sender, recipient, key, bytes32(tokenId), actions)), (BalanceDelta)
         );
+
+        if (-int256(delta.amount0()) > int256(uint256(currency0Max))) {
+            revert TooMuchSlippage(key.currency0, currency0Max, uint256(-int256(delta.amount0())));
+        }
+        if (-int256(delta.amount1()) > int256(uint256(currency1Max))) {
+            revert TooMuchSlippage(key.currency1, currency1Max, uint256(-int256(delta.amount1())));
+        }
 
         if (address(this).balance != 0) {
             msg.sender.safeTransferAllETH();
