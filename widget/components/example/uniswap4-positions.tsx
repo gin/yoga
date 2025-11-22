@@ -1,5 +1,6 @@
 'use client';
 
+import { ProtocolPosition } from '@/types/portfolio';
 import { useGetPortfolio } from '@/services/octav/loader';
 
 interface Uniswap4PositionsProps {
@@ -33,6 +34,40 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
   const uniswapValue = data?.assetByProtocols?.uniswap4?.value;
   const positions = data?.assetByProtocols?.uniswap4?.chains.ethereum?.protocolPositions.LIQUIDITYPOOL.protocolPositions;
 
+  const chains = data?.assetByProtocols?.uniswap4?.chains;
+
+  const renderPositionsByChain = () => {
+    if (!chains) {
+      return null;
+    }
+
+    return Object.keys(chains).map((chainKey) => {
+      const chainData = chains[chainKey];
+      const positions = chainData.protocolPositions?.LIQUIDITYPOOL?.protocolPositions;
+      const numOfPositions = chainData.protocolPositions?.LIQUIDITYPOOL?.protocolPositions?.length;
+
+      if (!positions || positions.length === 0) {
+        return null;
+      }
+
+      return (
+        <div key={chainKey} className="mt-4">
+          <h3 className="text-md font-semibold capitalize mb-2">{chainKey}</h3>
+          <p className="text-gray-600">Number of positions: {numOfPositions ?? 0}</p>
+          <div className="space-y-2">
+            {positions.map((position: ProtocolPosition, index: number) => (
+              <div key={index} className="p-2 border border-gray-200 rounded-md bg-white">
+                <p className="font-medium text-sm">Position {index + 1}</p>
+                {/* This type error is ok. */}
+                <p className="text-xs text-gray-500">Value: ${position.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
     <div className="p-4 border border-gray-300 bg-gray-50 rounded-md">
       <p className="font-semibold text-gray-800">Uniswap v4 LP positions</p>
@@ -46,11 +81,15 @@ export default function Uniswap4Positions({ ownerAddress = '0x6426af179aabebe476
                 <div key={index} className="p-2 border border-gray-200 rounded-md bg-white">
                   <p className="font-medium text-sm">Position {index + 1}</p>
                   <p className="text-xs text-gray-500">Value: ${position.value}</p>
-                  {/* You can add more details here as you see fit */}
                 </div>
               ))}
             </div>
           )}
+
+          {/* Test currently */}
+          <br />
+          <p className="text-gray-600">Total value: ${uniswapValue}</p>
+          {renderPositionsByChain()}
         </>
       ) : <p className="text-gray-600">No Uniswap v4 positions found.</p>}
     </div>
