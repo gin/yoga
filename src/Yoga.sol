@@ -197,7 +197,11 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
                 // the liquidity modification happens exactly on an existing
                 // range of ticks. we don't need to mutate the tree at all
 
-                // TODO:
+                SimpleModifyLiquidityParams memory i = actions[0];
+                i.tickLower = params.tickLower;
+                i.tickUpper = params.tickUpper;
+                i.liquidityDelta = params.liquidityDelta;
+                actions.truncate(1);
             } else {
                 // split the existing position that ranges from
                 // `params.tickLower` to `rightTick` into two new positions that
