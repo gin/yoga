@@ -18,6 +18,7 @@ import {Position} from "@uniswapv4/libraries/Position.sol";
 import {StateLibrary} from "@uniswapv4/libraries/StateLibrary.sol";
 
 //import {MultiCallContext} from "lib/MultiCallContext.sol";
+import {Panic} from "lib/Panic.sol";
 
 struct SimpleModifyLiquidityParams {
     // the lower and upper tick of the position
@@ -27,10 +28,18 @@ struct SimpleModifyLiquidityParams {
     int256 liquidityDelta;
 }
 
-struct SubPositions {
-    RedBlackTreeLib.Tree tree;
-    uint24 lastTick;
+library LibSimpleModifyLiquidityParams {
+    function truncate(SimpleModifyLiquidityParams[] memory a, uint256 l) {
+        if (l > a.length) {
+            Panic.panic(Panic.ARRAY_OUT_OF_BOUNDS);
+        }
+        assembly ("memory-safe") {
+            mstore(a, l)
+        }
+    }
 }
+
+using LibSimpleModifyLiquidityParams for SimpleModifyLiquidityParams;
 
 library CurrencySafeTransferLib {
     using SafeTransferLib for address;
@@ -47,6 +56,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
     using RedBlackTreeLib for bytes32;
 
     error SplitTooComplicated();
+    error NegativeLiquidity();
 
     modifier onlyOwnerOrApproved(uint256 tokenId) {
         if (!_isApprovedOrOwner(msg.sender, tokenId)) {
@@ -60,7 +70,7 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
 
     uint256 public nextTokenid = 1;
 
-    mapping(uint256 => SubPositions) private _subPositions;
+    mapping(uint256 => RedBlackTreeLib.Tree) private _subPositions;
 
     function _tickToTreeKey(int24 tick) private pure returns (uint24) {
         unchecked {
@@ -83,14 +93,14 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         unchecked {
             tokenId = nextTokenId++;
         }
-        SubPositions storage subPositions = _subPositions[tokenId];
-        subPositions.tree.insert(_tickToTreeKey(params.tickLower));
-        subPositions.lastTick = _tickToTreeKey(params.tickUpper);
+        RedBlackTreeLib.Tree storage subPositions = _subPositions[tokenId];
+        subPositions.insert(_tickToTreeKey(params.tickLower));
+        subPositions.insert(_tickToTreeKey(params.tickUpper));
 
         SimpleModifyLiquidityParams[] memory paramsArray = new SimpleModifyLiquidityParams[](1);
         paramsArray[0] = params;
         delta = abi.decode(
-            POOL_MANAGER.unlock(abi.encode(msg.sender, payable(msg.sender), key, bytes32(tokenId), params)),
+            POOL_MANAGER.unlock(abi.encode(msg.sender, payable(msg.sender), key, bytes32(tokenId), paramsArray)),
             (BalanceDelta)
         );
 
@@ -100,67 +110,101 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         }
     }
 
-    function modify(uint256 tokenId, PoolKey calldata key, SimpleModifyLiquidityParams calldata params)
+    function modify(address payable recipient, uint256 tokenId, PoolKey calldata key, SimpleModifyLiquidityParams calldata params)
         external
         payable
         nonReentrant
         onlyOwnerOrApproved(tokenId)
         returns (BalanceDelta delta)
     {
-        SubPositions storage subPositions = _subPositions[tokenId];
-        int24 leftTick = _treeKeyToTick(subPositions.tree.nearestBefore(_tickToTreeKey(params.tickLower)).value());
+        SimpleModifyLiquidityParams[] memory actions = new SimpleModifyLiquidityParams[](3);
 
-        if (leftTick == params.tickLower) {
-            int24 rightTick = _treeKeyToTick(subPositions.tree.nearestAfter(_tickToTreeKey(params.tickUpper)).value());
-            if (rightTick < _MIN_TICK) {
-                // extend position on the right
-            } else {
-                if (
-                    params.liquidityDelta < 0
-                        && StateLibrary.getPositionLiquidity(
-                            POOL_MANAGER,
-                            key.toId(),
-                            Position.calculateePositionKey(address(this), params.tickLower, rightTick, bytes32(tokenid))
-                        ) == uint256(-params.liquidityDelta)
-                ) {
-                    // close the left portion of a subposition
-                }
-                // mutate subposition on the left (params.tickUpper is the split
-                // point)
-
-                // TODO: merge the new left subposition with the next-rightward
-                // subposition if they have the same liquidity
-            }
-        } else {
-            if (
-                _treeKeyToTick(subPositions.tree.nearestAfter(_tickToTreeKey(params.tickUpper)).value())
-                    != params.tickUpper
-            ) {
-                // tried to mutate multiple subpositions, make 2 splits of
-                // subpositions, or extend the position on both ends
+        RedBlackTreeLib.Tree storage subPositions = _subPositions[tokenId];
+        bytes32 leftTickPtr = subPositions.nearestBefore(_tickToTreeKey(params.tickLower));
+        int24 leftTick;
+        bytes32 rightTick;
+        int24 rightTick;
+        if (leftTickPtr == 0) {
+            rightTickPtr = subPositions.first();
+            rightTick = _treeKeyToTick(rightTickPtr.value());
+            if (rightTick != params.tickUpper) {
                 revert SplitTooComplicated();
             }
+            if (params.liquidityDelta < 0) {
+                revert NegativeLiquidity();
+            }
 
-            if (leftTick < _MIN_TICK) {
-                // extend position on the left
+            subPositions.insert(_tickToTreeKey(params.tickLower));
+            SimpleModifyLiquidityParams memory i = actions[0];
+            i.tickLower = params.tickLower;
+            i.tickUpper = params.tickUpper;
+            i.liquidityDelta = params.liquidityDelta;
+            actions.truncate(1);
+        } else if ((leftTick = _treeKeyToTick(leftTickPtr.value())) == params.tickLower) {
+            if ((rightTickPtr = leftTick.next()) == 0) {
+                subPositions.insert(_tickToTreeKey(rightTick = params.tickUpper));
+                actions[0] = params;
+                actions.truncate(1);
             } else {
-                if (
-                    params.liquidityDelta < 0
-                        && StateLibrary.getPositionLiquidity(
+                rightTick = _treeKeyToTick(rightTick.value());
+                uint256 beforeLiquidity = StateLibrary.getPositionLiquidity(
+                                POOL_MANAGER,
+                                key.toId(),
+                                Position.calculatePositionKey(address(this), params.tickLower, rightTick, bytes32(tokenid))
+                                                                          );
+                {
+                    SimpleModifyLiquidityParams memory i = actions[0];
+                    i.tickLower = params.tickLower;
+                    i.tickUpper = rightTick;
+                    i.liquidityDelta = -int256(beforeLiquidity);
+                }
+                {
+                    SimpleModifyLiquidityParams memory i = actions[1];
+                    i.tickLower = params.tickLower;
+                    i.tickUpper = params.tickUpper;
+                    i.liquidityDelta = int256(beforeLiquidity) + params.liquidityDelta;
+                }
+                {
+                    SimpleModifyLiquidityParams memory i = actions[2];
+                    i.tickLower = params.tickUpper;
+                    i.tickUpper = rightTick;
+                    i.liquidityDelta = int256(beforeLiquidity);
+                }
+            }
+        } else if ((rightTick = _treeKeyToTick((rightTickPtr = subpositions.nearestAfter(_tickToTreeKey(params.tickUpper))).value())) != param.tickUpper) {
+            revert SplitTooComplicated();
+        } else {
+            uint256 beforeLiquidity = StateLibrary.getPositionLiquidity(
                             POOL_MANAGER,
                             key.toId(),
-                            Position.calculateePositionKey(address(this), leftTick, params.tickUpper, bytes32(tokenid))
-                        ) == uint256(-params.liquidityDelta)
-                ) {
-                    // close the right portion of a subposition
-                }
-                // mutate subposition on the right (params.tickLower is the
-                // split point)
-
-                // TODO: merge the new right subposition with the next-rightward
-                // subposition if they have the same liquidity
+                            Position.calculatePositionKey(address(this), params.tickLower, rightTick, bytes32(tokenid))
+                                                                      );
+            {
+                SimpleModifyLiquidityParams memory i = actions[0];
+                i.tickLower = leftTick;
+                i.tickUpper = params.tickUpper;
+                i.liquidityDelta = -int256(beforeLiquidity);
+            }
+            {
+                SimpleModifyLiquidityParams memory i = actions[1];
+                i.tickLower = leftTick;
+                i.tickUpper = params.tickLower;
+                i.liquidityDelta = int256(beforeLiquidity);
+            }
+            {
+                SimpleModifyLiquidityParams memory i = actions[2];
+                i.tickLower = params.tickLower;
+                i.tickUpper = params.tickUpper;
+                i.liquidityDelta = int256(beforeLiquidity) + params.liquidityDelta;
             }
         }
+
+        // TODO: merge liquidity when the amounts are set exactly equal in the next/previous segment
+
+        delta = abi.decode(
+            POOL_MANAGER.unlock(abi.encode(msg.sender, recipient, key, bytes32(tokenId), actions)),
+            (BalanceDelta)
+        );
 
         if (address(this).balance != 0) {
             msg.sender.safeTransferAllETH();
@@ -216,7 +260,6 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
 
     function getTicks(uint256 tokenId) external view returns (int24[] memory) {
         SubPositions storage subPositions = _subPositions[tokenId];
-        uint24 lastTick = subPositions.lastTick;
 
         // allocate an extra word to store the indirection offset for the return
         assembly ("memory-safe") {
@@ -224,19 +267,11 @@ contract Yoga is IERC165, IUnlockCallback, ERC721, /*, MultiCallContext */ Reent
         }
 
         // walk the tree
-        uint256[] memory result = subPositions.tree.values();
+        uint256[] memory result = subPositions.values();
 
         // return
         assembly ("memory-safe") {
-            // increase the length of `result` to store `lastTick`
-            let len := mload(result)
-            len := add(0x01, len)
-            mstore(result, len)
-            // insert `lastTick` at the end of the array
-            len := shl(0x05, len)
-            mstore(add(len, result), sub(lastTick, 887273))
-            // we don't bother to increase the free memory pointer because this
-            // block does not return to Solidity
+            let len := shl(0x05, mload(result))
 
             // format each tree key as a tick
             for {
