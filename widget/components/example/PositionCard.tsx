@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { ethers } from 'ethers';
-import { Token, Ether } from '@uniswap/sdk-core';
+import { Token, Ether, Price } from '@uniswap/sdk-core';
+import { tickToPrice } from '@uniswap/v4-sdk';
 import { ProtocolPosition } from '@/types/portfolio';
 import { getPoolId } from '../utils/getPoolId';
 
@@ -24,6 +25,7 @@ const ABI = [
 export default function PositionCard({ position, index, chainKey, chainId }: PositionCardProps) {
     const [poolId, setPoolId] = useState<string>('Loading...');
     const [ticks, setTicks] = useState<{ lower: number; upper: number } | null>(null);
+    const [prices, setPrices] = useState<{ lower: string; upper: string } | null>(null);
 
     useEffect(() => {
         async function fetchPositionData() {
@@ -44,6 +46,11 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                 const result = await contract.getPoolAndPositionInfo(tokenId);
                 const poolKey = result.poolKey;
                 const positionInfo = ethers.BigNumber.from(result.positionInfo);
+                console.log('Debug PositionInfo:', {
+                    hex: positionInfo.toHexString(),
+                    tickLower24: positionInfo.shr(128).mask(24).toNumber(),
+                    tickUpper24: positionInfo.shr(152).mask(24).toNumber()
+                });
 
                 // Unpack PositionInfo
                 // Layout: liquidity (128 bits), tickLower (24 bits), tickUpper (24 bits)
@@ -64,6 +71,8 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                 const tickLower = parseTick(tickLower24);
                 const tickUpper = parseTick(tickUpper24);
 
+                console.log('Debug Ticks:', { tickLower, tickUpper });
+
                 if (v4Position.assets && v4Position.assets.length >= 2 && chainId) {
                     const getCurrency = (address: string, asset: any) => {
                         if (address === '0x0000000000000000000000000000000000000000') {
@@ -81,6 +90,14 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                     const token0 = getCurrency(poolKey.currency0, v4Position.assets[0]);
                     const token1 = getCurrency(poolKey.currency1, v4Position.assets[1]);
 
+                    console.log('Debug Pool Data:', {
+                        token0: { address: token0.isNative ? 'NATIVE' : token0.address, decimals: token0.decimals, symbol: token0.symbol },
+                        token1: { address: token1.isNative ? 'NATIVE' : token1.address, decimals: token1.decimals, symbol: token1.symbol },
+                        fee: poolKey.fee,
+                        tickSpacing: poolKey.tickSpacing,
+                        hooks: poolKey.hooks
+                    });
+
                     const calculatedPoolId = getPoolId(
                         token0,
                         token1,
@@ -90,6 +107,18 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                     );
                     setPoolId(calculatedPoolId);
                     setTicks({ lower: tickLower, upper: tickUpper });
+
+                    try {
+                        const priceLower = tickToPrice(token0, token1, tickLower);
+                        const priceUpper = tickToPrice(token0, token1, tickUpper);
+                        setPrices({
+                            lower: priceLower.toSignificant(6),
+                            upper: priceUpper.toSignificant(6)
+                        });
+                    } catch (priceError) {
+                        console.warn('Failed to calculate prices:', priceError);
+                        setPrices(null);
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching position data:', error);
@@ -130,6 +159,11 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
             {ticks && (
                 <p className="text-xs text-gray-500">
                     Tick range: ({ticks.lower}, {ticks.upper})
+                </p>
+            )}
+            {prices && (
+                <p className="text-xs text-gray-500">
+                    Price range: ({prices.lower}, {prices.upper}) {position.assets?.[1].symbol} per {position.assets?.[0].symbol}
                 </p>
             )}
         </div>
