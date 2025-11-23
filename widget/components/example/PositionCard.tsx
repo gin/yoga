@@ -199,13 +199,27 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
             )}
             {currentPrice && (
                 <div className="text-xs text-gray-500">
-                    {currentTick !== null && (
-                        <p>Current Tick: {currentTick}</p>
-                    )}
-
                     <p>Current Price: {currentPrice} {position.assets?.[1].symbol} per {position.assets?.[0].symbol}</p>
 
-                    <p className={inRange ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                    {currentTick !== null && ticks && (
+                        <div className="mt-2">
+                            <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                    className={`absolute top-0 bottom-0 w-2 rounded-full ${inRange ? 'bg-green-500' : 'bg-red-500'}`}
+                                    style={{
+                                        left: `${Math.max(0, Math.min(100, ((currentTick - ticks.lower) / (ticks.upper - ticks.lower)) * 100))}%`,
+                                        transform: 'translateX(-50%)'
+                                    }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                                <span>{prices?.lower}</span>
+                                <span>{prices?.upper}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <p className={`mt-1 ${inRange ? "text-green-600 font-medium" : "text-red-600 font-medium"}`}>
                         {inRange ? "✅ In Range" : "🚨 Out of Range"}
                     </p>
                 </div>
