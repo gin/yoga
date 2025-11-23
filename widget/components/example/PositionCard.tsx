@@ -19,13 +19,17 @@ const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.ankr.com/eth';
 
 // Updated ABI to match the packed return data for info
 const ABI = [
-    'function getPoolAndPositionInfo(uint256 tokenId) external view returns (tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) poolKey, bytes32 positionInfo)'
+    'function getPoolAndPositionInfo(uint256 tokenId) external view returns (tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) poolKey, bytes32 positionInfo)',
+    'function getSlot0(bytes32 id) external view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)'
 ];
 
 export default function PositionCard({ position, index, chainKey, chainId }: PositionCardProps) {
     const [poolId, setPoolId] = useState<string>('Loading...');
     const [ticks, setTicks] = useState<{ lower: number; upper: number } | null>(null);
     const [prices, setPrices] = useState<{ lower: string; upper: string } | null>(null);
+    const [currentPrice, setCurrentPrice] = useState<string | null>(null);
+    const [currentTick, setCurrentTick] = useState<number | null>(null);
+    const [inRange, setInRange] = useState<boolean | null>(null);
 
     useEffect(() => {
         async function fetchPositionData() {
@@ -101,23 +105,50 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                     const calculatedPoolId = getPoolId(
                         token0,
                         token1,
-                        poolKey.fee,
-                        poolKey.tickSpacing,
+                        Number(poolKey.fee),
+                        Number(poolKey.tickSpacing),
                         poolKey.hooks
                     );
+                    console.log('Debug Calculated PoolID:', calculatedPoolId);
+
                     setPoolId(calculatedPoolId);
                     setTicks({ lower: tickLower, upper: tickUpper });
 
+                    // Calculate Price Range
+                    let priceLowerVal = 0;
+                    let priceUpperVal = 0;
                     try {
                         const priceLower = tickToPrice(token0, token1, tickLower);
                         const priceUpper = tickToPrice(token0, token1, tickUpper);
+                        priceLowerVal = parseFloat(priceLower.toSignificant(6));
+                        priceUpperVal = parseFloat(priceUpper.toSignificant(6));
+
                         setPrices({
                             lower: priceLower.toSignificant(6),
                             upper: priceUpper.toSignificant(6)
                         });
                     } catch (priceError) {
-                        console.warn('Failed to calculate prices:', priceError);
+                        console.warn('Failed to calculate price range:', priceError);
                         setPrices(null);
+                    }
+
+                    // Calculate Current Price from Assets
+                    if (v4Position.assets && v4Position.assets.length >= 2) {
+                        const price0 = parseFloat(v4Position.assets[0].price);
+                        const price1 = parseFloat(v4Position.assets[1].price);
+
+                        if (price1 > 0) {
+                            const currentPriceVal = price0 / price1;
+                            setCurrentPrice(currentPriceVal.toPrecision(6));
+
+                            // Calculate current tick
+                            // tick = floor(log(price) / log(1.0001))
+                            const currentTickVal = Math.floor(Math.log(currentPriceVal) / Math.log(1.0001));
+                            setCurrentTick(currentTickVal);
+
+                            // Check if in range using ticks
+                            setInRange(currentTickVal >= tickLower && currentTickVal < tickUpper);
+                        }
                     }
                 }
             } catch (error) {
@@ -165,6 +196,19 @@ export default function PositionCard({ position, index, chainKey, chainId }: Pos
                 <p className="text-xs text-gray-500">
                     Price range: ({prices.lower}, {prices.upper}) {position.assets?.[1].symbol} per {position.assets?.[0].symbol}
                 </p>
+            )}
+            {currentPrice && (
+                <div className="text-xs text-gray-500">
+                    {currentTick !== null && (
+                        <p>Current Tick: {currentTick}</p>
+                    )}
+
+                    <p>Current Price: {currentPrice} {position.assets?.[1].symbol} per {position.assets?.[0].symbol}</p>
+
+                    <p className={inRange ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                        {inRange ? "✅ In Range" : "🚨 Out of Range"}
+                    </p>
+                </div>
             )}
         </div>
     );
